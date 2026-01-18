@@ -1,0 +1,1222 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cyberpunk Particle Catch</title>
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&display=swap" rel="stylesheet">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            background: #000;
+            overflow: hidden;
+            font-family: 'Orbitron', monospace;
+            color: #00FFFF;
+        }
+
+        #gameContainer {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+        }
+
+        #webcam {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            object-fit: cover;
+            transform: scaleX(-1);
+            opacity: 0.15;
+            z-index: 1;
+        }
+
+        #threeCanvas {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            z-index: 2;
+        }
+
+        /* Scanlines overlay */
+        .scanlines {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: repeating-linear-gradient(
+                0deg,
+                rgba(0, 0, 0, 0.1) 0px,
+                rgba(0, 0, 0, 0.1) 1px,
+                transparent 1px,
+                transparent 3px
+            );
+            pointer-events: none;
+            z-index: 10;
+            animation: scanlineMove 8s linear infinite;
+        }
+
+        @keyframes scanlineMove {
+            0% { transform: translateY(0); }
+            100% { transform: translateY(12px); }
+        }
+
+        /* Vignette effect */
+        .vignette {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: radial-gradient(ellipse at center, transparent 40%, rgba(0,0,0,0.8) 100%);
+            pointer-events: none;
+            z-index: 11;
+        }
+
+        /* Screen shake animation */
+        @keyframes shake {
+            0%, 100% { transform: translateX(0); }
+            25% { transform: translateX(-10px) translateY(5px); }
+            50% { transform: translateX(10px) translateY(-5px); }
+            75% { transform: translateX(-5px) translateY(10px); }
+        }
+
+        .shake {
+            animation: shake 0.3s ease-in-out;
+        }
+
+        /* Miss flash */
+        .miss-flash {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: radial-gradient(ellipse at center, transparent 30%, rgba(255, 0, 50, 0.4) 100%);
+            pointer-events: none;
+            z-index: 12;
+            opacity: 0;
+            transition: opacity 0.1s;
+        }
+
+        .miss-flash.active {
+            opacity: 1;
+        }
+
+        /* HUD Styles */
+        .hud {
+            position: fixed;
+            z-index: 20;
+            text-shadow: 0 0 10px currentColor, 0 0 20px currentColor;
+            letter-spacing: 2px;
+        }
+
+        #score {
+            top: 20px;
+            left: 30px;
+            font-size: 28px;
+            font-weight: 700;
+        }
+
+        #combo {
+            top: 20px;
+            right: 30px;
+            font-size: 24px;
+            color: #FF00FF;
+            transition: transform 0.1s;
+        }
+
+        #combo.pulse {
+            transform: scale(1.3);
+        }
+
+        #lives {
+            top: 70px;
+            left: 30px;
+            font-size: 24px;
+            display: flex;
+            gap: 8px;
+        }
+
+        .heart {
+            color: #FF0066;
+            text-shadow: 0 0 10px #FF0066, 0 0 20px #FF0066;
+            transition: all 0.3s;
+        }
+
+        .heart.lost {
+            opacity: 0.2;
+            transform: scale(0.8);
+        }
+
+        #level {
+            bottom: 20px;
+            left: 30px;
+            font-size: 18px;
+            color: #00FF88;
+        }
+
+        #fps {
+            bottom: 20px;
+            right: 30px;
+            font-size: 14px;
+            color: #666;
+        }
+
+        #highScore {
+            top: 70px;
+            right: 30px;
+            font-size: 14px;
+            color: #FFFF00;
+        }
+
+        /* Combo glow effect */
+        .combo-glow {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            z-index: 9;
+            box-shadow: inset 0 0 100px rgba(0, 255, 255, 0);
+            transition: box-shadow 0.3s;
+        }
+
+        .combo-glow.level-1 { box-shadow: inset 0 0 60px rgba(0, 255, 255, 0.1); }
+        .combo-glow.level-2 { box-shadow: inset 0 0 80px rgba(255, 0, 255, 0.15); }
+        .combo-glow.level-3 { box-shadow: inset 0 0 100px rgba(255, 255, 0, 0.2); }
+        .combo-glow.level-4 { 
+            box-shadow: inset 0 0 120px rgba(255, 0, 255, 0.25);
+            animation: rainbowGlow 1s linear infinite;
+        }
+
+        @keyframes rainbowGlow {
+            0% { box-shadow: inset 0 0 120px rgba(255, 0, 0, 0.25); }
+            33% { box-shadow: inset 0 0 120px rgba(0, 255, 0, 0.25); }
+            66% { box-shadow: inset 0 0 120px rgba(0, 0, 255, 0.25); }
+            100% { box-shadow: inset 0 0 120px rgba(255, 0, 0, 0.25); }
+        }
+
+        /* Menu & Game Over screens */
+        .overlay-screen {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            z-index: 100;
+            background: rgba(0, 0, 0, 0.85);
+            opacity: 1;
+            transition: opacity 0.5s;
+        }
+
+        .overlay-screen.hidden {
+            opacity: 0;
+            pointer-events: none;
+        }
+
+        .game-title {
+            font-size: 48px;
+            font-weight: 900;
+            color: #00FFFF;
+            text-shadow: 0 0 20px #00FFFF, 0 0 40px #00FFFF, 0 0 60px #00FFFF;
+            margin-bottom: 20px;
+            text-align: center;
+        }
+
+        .game-subtitle {
+            font-size: 18px;
+            color: #FF00FF;
+            margin-bottom: 60px;
+            text-shadow: 0 0 10px #FF00FF;
+        }
+
+        .instruction {
+            font-size: 20px;
+            color: #00FF88;
+            text-shadow: 0 0 10px #00FF88;
+            animation: pulse 1.5s ease-in-out infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 0.6; }
+            50% { opacity: 1; }
+        }
+
+        .hand-icon {
+            font-size: 60px;
+            margin: 30px 0;
+            animation: float 2s ease-in-out infinite;
+        }
+
+        @keyframes float {
+            0%, 100% { transform: translateY(0); }
+            50% { transform: translateY(-15px); }
+        }
+
+        /* Game over specific */
+        .final-stats {
+            margin: 40px 0;
+            text-align: center;
+        }
+
+        .stat-row {
+            font-size: 22px;
+            margin: 15px 0;
+            color: #FFFF00;
+        }
+
+        .stat-label {
+            color: #888;
+            font-size: 14px;
+            display: block;
+            margin-bottom: 5px;
+        }
+
+        .new-high {
+            color: #00FF88;
+            font-size: 24px;
+            animation: pulse 0.5s ease-in-out infinite;
+            margin-top: 20px;
+        }
+
+        /* Catch zone indicator */
+        .catch-indicator {
+            position: fixed;
+            bottom: 60px;
+            left: 50%;
+            transform: translateX(-50%);
+            font-size: 14px;
+            color: #666;
+            z-index: 20;
+        }
+
+        .catch-indicator.active {
+            color: #00FF88;
+            text-shadow: 0 0 10px #00FF88;
+        }
+
+        /* Debug/Status panel */
+        .status-panel {
+            position: fixed;
+            top: 120px;
+            left: 30px;
+            font-size: 12px;
+            color: #666;
+            z-index: 20;
+            line-height: 1.8;
+        }
+
+        .status-panel .detecting {
+            color: #00FF88;
+            text-shadow: 0 0 5px #00FF88;
+        }
+
+        .status-panel .not-detecting {
+            color: #FF0066;
+        }
+
+        /* Hand position indicator */
+        .hand-marker {
+            position: fixed;
+            width: 30px;
+            height: 30px;
+            border: 3px solid #00FFFF;
+            border-radius: 50%;
+            pointer-events: none;
+            z-index: 25;
+            transform: translate(-50%, -50%);
+            box-shadow: 0 0 20px #00FFFF, inset 0 0 10px rgba(0, 255, 255, 0.3);
+            display: none;
+        }
+
+        .hand-marker.active {
+            display: block;
+        }
+
+        .hand-marker.open {
+            border-color: #00FF88;
+            box-shadow: 0 0 30px #00FF88, inset 0 0 15px rgba(0, 255, 136, 0.5);
+            width: 50px;
+            height: 50px;
+        }
+
+        /* Level up flash */
+        .level-up-flash {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(180deg, transparent 0%, rgba(0, 255, 136, 0.3) 50%, transparent 100%);
+            pointer-events: none;
+            z-index: 15;
+            opacity: 0;
+            transform: translateY(-100%);
+        }
+
+        .level-up-flash.active {
+            animation: levelUpSweep 0.8s ease-out;
+        }
+
+        @keyframes levelUpSweep {
+            0% { opacity: 1; transform: translateY(-100%); }
+            100% { opacity: 0; transform: translateY(100%); }
+        }
+
+        /* Grid background */
+        .grid-bg {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-image: 
+                linear-gradient(rgba(0, 255, 255, 0.03) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(0, 255, 255, 0.03) 1px, transparent 1px);
+            background-size: 50px 50px;
+            z-index: 0;
+            animation: gridMove 20s linear infinite;
+        }
+
+        @keyframes gridMove {
+            0% { background-position: 0 0; }
+            100% { background-position: 50px 50px; }
+        }
+    </style>
+</head>
+<body>
+    <div class="grid-bg"></div>
+    <video id="webcam" autoplay playsinline></video>
+    <canvas id="threeCanvas"></canvas>
+    <div class="scanlines"></div>
+    <div class="vignette"></div>
+    <div class="miss-flash" id="missFlash"></div>
+    <div class="combo-glow" id="comboGlow"></div>
+    <div class="level-up-flash" id="levelUpFlash"></div>
+
+    <!-- HUD Elements -->
+    <div class="hud" id="score">SCORE: 0</div>
+    <div class="hud" id="combo">x1</div>
+    <div class="hud" id="lives">
+        <span class="heart">♥</span>
+        <span class="heart">♥</span>
+        <span class="heart">♥</span>
+    </div>
+    <div class="hud" id="highScore">HIGH: 0</div>
+    <div class="hud" id="level">LEVEL 1</div>
+    <div class="hud" id="gameStateDisplay" style="bottom: 45px; left: 30px; font-size: 12px; color: #FF00FF;">STATE: MENU</div>
+    <div class="hud" id="orbCount" style="bottom: 45px; right: 30px; font-size: 12px; color: #666;">ORBS: 0</div>
+    <div class="hud" id="fps">FPS: 60</div>
+    <div class="catch-indicator" id="catchIndicator">✋ OPEN PALM TO CATCH</div>
+    
+    <!-- Status Panel for debugging -->
+    <div class="status-panel" id="statusPanel">
+        <div>CAMERA: <span id="cameraStatus" class="not-detecting">LOADING...</span></div>
+        <div>HANDS: <span id="handStatus" class="not-detecting">NONE</span></div>
+        <div>LEFT: <span id="leftHandStatus">-</span></div>
+        <div>RIGHT: <span id="rightHandStatus">-</span></div>
+    </div>
+
+    <!-- Visual hand position markers -->
+    <div class="hand-marker" id="leftHandMarker"></div>
+    <div class="hand-marker" id="rightHandMarker"></div>
+
+    <!-- Menu Screen -->
+    <div class="overlay-screen" id="menuScreen">
+        <div class="game-title">CYBER CATCH</div>
+        <div class="game-subtitle">// NEON PARTICLE HUNTER //</div>
+        <div class="hand-icon">🖐️</div>
+        <div class="instruction">HOLD OPEN PALM FOR 1 SEC TO START</div>
+        <div style="margin-top: 40px; font-size: 14px; color: #666; max-width: 500px; text-align: center; line-height: 1.8;">
+            <div style="color: #00FFFF; margin-bottom: 10px;">HOW TO PLAY:</div>
+            <div>1. Open your palm to activate CATCH ZONE</div>
+            <div>2. Move your hand to catch falling orbs</div>
+            <div>3. Build combos for bonus points</div>
+            <div>4. Don't let orbs fall past the bottom!</div>
+        </div>
+        <div id="startProgress" style="margin-top: 30px; width: 200px; height: 4px; background: #333; border-radius: 2px; overflow: hidden;">
+            <div id="startProgressBar" style="width: 0%; height: 100%; background: #00FF88; transition: width 0.1s;"></div>
+        </div>
+    </div>
+
+    <!-- Game Over Screen -->
+    <div class="overlay-screen hidden" id="gameOverScreen">
+        <div class="game-title" style="color: #FF0066;">GAME OVER</div>
+        <div class="final-stats">
+            <div class="stat-row">
+                <span class="stat-label">FINAL SCORE</span>
+                <span id="finalScore">0</span>
+            </div>
+            <div class="stat-row">
+                <span class="stat-label">MAX COMBO</span>
+                <span id="maxCombo">x1</span>
+            </div>
+            <div class="stat-row">
+                <span class="stat-label">ORBS CAUGHT</span>
+                <span id="orbsCaught">0</span>
+            </div>
+            <div class="new-high hidden" id="newHighScore">★ NEW HIGH SCORE ★</div>
+        </div>
+        <div class="hand-icon">🖐️</div>
+        <div class="instruction">HOLD OPEN PALM FOR 1 SEC TO RESTART</div>
+        <div style="margin-top: 20px; width: 200px; height: 4px; background: #333; border-radius: 2px; overflow: hidden;">
+            <div id="restartProgressBar" style="width: 0%; height: 100%; background: #00FF88; transition: width 0.1s;"></div>
+        </div>
+    </div>
+
+    <!-- Three.js -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <!-- MediaPipe Hands -->
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+
+    <script>
+        // ============================================
+        // GAME CONFIGURATION
+        // ============================================
+        const CONFIG = {
+            ORB_TYPES: [
+                { name: 'common', color: 0x00FFFF, points: 10, chance: 0.60, speedMult: 1.0 },
+                { name: 'rare', color: 0xFFFF00, points: 25, chance: 0.25, speedMult: 1.0 },
+                { name: 'epic', color: 0xFF00FF, points: 50, chance: 0.12, speedMult: 1.3 },
+                { name: 'legendary', color: 0x00FF88, points: 100, chance: 0.03, speedMult: 1.6 }
+            ],
+            BASE_SPAWN_INTERVAL: 800,
+            BASE_FALL_SPEED: 2.0,
+            CATCH_RADIUS: 120, // Increased for easier catching
+            INITIAL_LIVES: 3,
+            POINTS_PER_LEVEL: 1000,
+            MAX_COMBO: 10,
+            PARTICLE_COUNT_PER_ORB: 30
+        };
+
+        // Calculate scale factor for Three.js coordinates
+        function getScaleFactor() {
+            // Camera FOV and distance determine how pixels map to world units
+            const vFov = (camera.fov * Math.PI) / 180;
+            const height = 2 * Math.tan(vFov / 2) * camera.position.z;
+            return height / window.innerHeight;
+        }
+
+        // ============================================
+        // GAME STATE
+        // ============================================
+        const GameState = {
+            MENU: 'menu',
+            PLAYING: 'playing',
+            GAME_OVER: 'gameover'
+        };
+
+        let gameState = GameState.MENU;
+        let score = 0;
+        let combo = 1;
+        let maxCombo = 1;
+        let lives = CONFIG.INITIAL_LIVES;
+        let level = 1;
+        let orbsCaught = 0;
+        let highScore = parseInt(localStorage.getItem('cyberCatchHighScore')) || 0;
+        let lastSpawnTime = 0;
+        let handOpenTimer = 0;
+        const HAND_OPEN_DELAY = 1000; // 1 second to confirm start/restart
+
+        // ============================================
+        // THREE.JS SETUP
+        // ============================================
+        const canvas = document.getElementById('threeCanvas');
+        const scene = new THREE.Scene();
+        const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+        camera.position.z = 500;
+
+        const renderer = new THREE.WebGLRenderer({ canvas, alpha: true, antialias: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+
+        // ============================================
+        // ORB CLASS
+        // ============================================
+        class Orb {
+            constructor(type, screenX) {
+                this.type = type;
+                const scale = getScaleFactor();
+                // Convert screen X to Three.js world coordinates
+                this.x = (screenX - window.innerWidth / 2) * scale;
+                this.y = (window.innerHeight / 2 + 50) * scale; // Start above screen
+                this.z = (Math.random() - 0.5) * 50;
+                this.baseX = this.x;
+                this.time = Math.random() * Math.PI * 2;
+                this.caught = false;
+                this.missed = false;
+                this.particles = [];
+                this.scale = scale;
+                
+                // Create particle geometry for this orb
+                const particleCount = CONFIG.PARTICLE_COUNT_PER_ORB;
+                const positions = new Float32Array(particleCount * 3);
+                const colors = new Float32Array(particleCount * 3);
+                
+                const color = new THREE.Color(type.color);
+                
+                // Scale the orb size based on the scale factor
+                const orbSize = 30 * scale;
+                
+                for (let i = 0; i < particleCount; i++) {
+                    const theta = Math.random() * Math.PI * 2;
+                    const phi = Math.acos(2 * Math.random() - 1);
+                    const radius = orbSize + Math.random() * orbSize * 0.5;
+                    
+                    positions[i * 3] = radius * Math.sin(phi) * Math.cos(theta);
+                    positions[i * 3 + 1] = radius * Math.sin(phi) * Math.sin(theta);
+                    positions[i * 3 + 2] = radius * Math.cos(phi);
+                    
+                    colors[i * 3] = color.r;
+                    colors[i * 3 + 1] = color.g;
+                    colors[i * 3 + 2] = color.b;
+                }
+                
+                this.geometry = new THREE.BufferGeometry();
+                this.geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+                this.geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+                
+                this.material = new THREE.PointsMaterial({
+                    size: 8,
+                    vertexColors: true,
+                    blending: THREE.AdditiveBlending,
+                    transparent: true,
+                    opacity: 1,
+                    sizeAttenuation: true
+                });
+                
+                this.mesh = new THREE.Points(this.geometry, this.material);
+                this.mesh.position.set(this.x, this.y, this.z);
+                scene.add(this.mesh);
+            }
+            
+            update(deltaTime, fallSpeed) {
+                if (this.caught || this.missed) return;
+                
+                this.time += deltaTime * 3;
+                // Fall downward (negative Y in Three.js is down)
+                this.y -= fallSpeed * this.type.speedMult * this.scale;
+                this.x = this.baseX + Math.sin(this.time) * 20 * this.scale;
+                
+                this.mesh.position.set(this.x, this.y, this.z);
+                this.mesh.rotation.x += deltaTime * 0.5;
+                this.mesh.rotation.y += deltaTime * 0.3;
+                
+                // Check if missed (passed bottom of screen)
+                const bottomBoundary = -(window.innerHeight / 2 + 50) * this.scale;
+                if (this.y < bottomBoundary) {
+                    this.missed = true;
+                }
+            }
+            
+            checkCatch(palmX, palmY, isHandOpen) {
+                if (this.caught || this.missed || !isHandOpen) return false;
+                
+                // Convert palm coordinates to Three.js space with proper scaling
+                const scale = getScaleFactor();
+                const threeX = (palmX - window.innerWidth / 2) * scale;
+                const threeY = -(palmY - window.innerHeight / 2) * scale;
+                
+                const distance = Math.hypot(this.x - threeX, this.y - threeY);
+                const catchRadius = CONFIG.CATCH_RADIUS * scale;
+                
+                if (distance < catchRadius) {
+                    this.caught = true;
+                    this.explode();
+                    return true;
+                }
+                return false;
+            }
+            
+            explode() {
+                const positions = this.geometry.attributes.position.array;
+                const particleCount = positions.length / 3;
+                
+                // Animate explosion
+                let frame = 0;
+                const explodeAnim = () => {
+                    frame++;
+                    for (let i = 0; i < particleCount; i++) {
+                        positions[i * 3] *= 1.15;
+                        positions[i * 3 + 1] *= 1.15;
+                        positions[i * 3 + 2] *= 1.15;
+                    }
+                    this.geometry.attributes.position.needsUpdate = true;
+                    this.material.opacity -= 0.08;
+                    
+                    if (frame < 15) {
+                        requestAnimationFrame(explodeAnim);
+                    } else {
+                        this.destroy();
+                    }
+                };
+                explodeAnim();
+            }
+            
+            destroy() {
+                scene.remove(this.mesh);
+                this.geometry.dispose();
+                this.material.dispose();
+            }
+        }
+
+        // ============================================
+        // CATCH ZONE VISUALIZATION
+        // ============================================
+        class CatchZone {
+            constructor() {
+                // We'll create geometry after camera is set up
+                this.geometry = null;
+                this.innerGeom = null;
+                this.mesh = null;
+                this.innerMesh = null;
+                this.active = false;
+                this.targetOpacity = 0;
+                this.initialized = false;
+            }
+            
+            init() {
+                if (this.initialized) return;
+                
+                const scale = getScaleFactor();
+                const radius = CONFIG.CATCH_RADIUS * scale;
+                
+                this.geometry = new THREE.RingGeometry(radius - 10 * scale, radius, 32);
+                const material = new THREE.MeshBasicMaterial({
+                    color: 0x00FFFF,
+                    transparent: true,
+                    opacity: 0,
+                    side: THREE.DoubleSide,
+                    blending: THREE.AdditiveBlending
+                });
+                this.mesh = new THREE.Mesh(this.geometry, material);
+                this.mesh.position.z = 50;
+                scene.add(this.mesh);
+                
+                // Inner glow
+                this.innerGeom = new THREE.CircleGeometry(radius - 20 * scale, 32);
+                const innerMat = new THREE.MeshBasicMaterial({
+                    color: 0x00FFFF,
+                    transparent: true,
+                    opacity: 0,
+                    blending: THREE.AdditiveBlending
+                });
+                this.innerMesh = new THREE.Mesh(this.innerGeom, innerMat);
+                this.innerMesh.position.z = 45;
+                scene.add(this.innerMesh);
+                
+                this.initialized = true;
+            }
+            
+            update(palmX, palmY, isActive) {
+                if (!this.initialized) this.init();
+                if (!this.mesh) return;
+                
+                this.active = isActive;
+                this.targetOpacity = isActive ? 0.6 : 0;
+                
+                // Smooth opacity transition
+                this.mesh.material.opacity += (this.targetOpacity - this.mesh.material.opacity) * 0.15;
+                this.innerMesh.material.opacity = this.mesh.material.opacity * 0.15;
+                
+                if (palmX !== null && palmY !== null) {
+                    const scale = getScaleFactor();
+                    const threeX = (palmX - window.innerWidth / 2) * scale;
+                    const threeY = -(palmY - window.innerHeight / 2) * scale;
+                    
+                    this.mesh.position.x = threeX;
+                    this.mesh.position.y = threeY;
+                    this.innerMesh.position.x = threeX;
+                    this.innerMesh.position.y = threeY;
+                }
+                
+                // Pulsing effect when active
+                if (isActive) {
+                    const pulse = 1 + Math.sin(Date.now() * 0.01) * 0.1;
+                    this.mesh.scale.set(pulse, pulse, 1);
+                }
+            }
+            
+            setComboColor(comboLevel) {
+                if (!this.mesh) return;
+                
+                let color;
+                if (comboLevel >= 8) {
+                    // Rainbow effect
+                    const hue = (Date.now() * 0.001) % 1;
+                    color = new THREE.Color().setHSL(hue, 1, 0.5);
+                } else if (comboLevel >= 5) {
+                    color = new THREE.Color(0xFF00FF);
+                } else if (comboLevel >= 3) {
+                    color = new THREE.Color(0xFFFF00);
+                } else {
+                    color = new THREE.Color(0x00FFFF);
+                }
+                this.mesh.material.color = color;
+                this.innerMesh.material.color = color;
+            }
+        }
+
+        // ============================================
+        // GAME MANAGER
+        // ============================================
+        const orbs = [];
+        const catchZones = [new CatchZone(), new CatchZone()];
+        let handData = { left: null, right: null };
+
+        function updateHUD() {
+            document.getElementById('score').textContent = `SCORE: ${score.toLocaleString()}`;
+            document.getElementById('combo').textContent = `x${combo}`;
+            document.getElementById('level').textContent = `LEVEL ${level}`;
+            document.getElementById('highScore').textContent = `HIGH: ${highScore.toLocaleString()}`;
+            
+            // Update lives display
+            const hearts = document.querySelectorAll('.heart');
+            hearts.forEach((heart, i) => {
+                heart.classList.toggle('lost', i >= lives);
+            });
+            
+            // Update combo glow
+            const comboGlow = document.getElementById('comboGlow');
+            comboGlow.className = 'combo-glow';
+            if (combo >= 8) comboGlow.classList.add('level-4');
+            else if (combo >= 5) comboGlow.classList.add('level-3');
+            else if (combo >= 3) comboGlow.classList.add('level-2');
+            else if (combo >= 2) comboGlow.classList.add('level-1');
+            
+            // Update catch zones combo color
+            catchZones.forEach(zone => zone.setComboColor(combo));
+        }
+
+        function spawnOrb() {
+            // Determine orb type based on chances
+            const roll = Math.random();
+            let cumulative = 0;
+            let selectedType = CONFIG.ORB_TYPES[0];
+            
+            for (const type of CONFIG.ORB_TYPES) {
+                cumulative += type.chance;
+                if (roll <= cumulative) {
+                    selectedType = type;
+                    break;
+                }
+            }
+            
+            // Random X position in screen coordinates
+            const padding = 100;
+            const screenX = Math.random() * (window.innerWidth - padding * 2) + padding;
+            
+            const newOrb = new Orb(selectedType, screenX);
+            orbs.push(newOrb);
+            console.log(`Spawned ${selectedType.name} orb at x:${screenX.toFixed(0)}, Total orbs: ${orbs.length}`);
+        }
+
+        function getSpawnInterval() {
+            // Decrease spawn interval as level increases
+            return Math.max(300, CONFIG.BASE_SPAWN_INTERVAL - (level - 1) * 50);
+        }
+
+        function getFallSpeed() {
+            // Increase fall speed as level increases
+            return CONFIG.BASE_FALL_SPEED + (level - 1) * 0.3;
+        }
+
+        function onCatch(orb) {
+            const points = orb.type.points * combo;
+            score += points;
+            orbsCaught++;
+            combo = Math.min(combo + 1, CONFIG.MAX_COMBO);
+            if (combo > maxCombo) maxCombo = combo;
+            
+            // Check for level up
+            const newLevel = Math.floor(score / CONFIG.POINTS_PER_LEVEL) + 1;
+            if (newLevel > level) {
+                level = newLevel;
+                triggerLevelUp();
+            }
+            
+            // Pulse combo display
+            const comboEl = document.getElementById('combo');
+            comboEl.classList.add('pulse');
+            setTimeout(() => comboEl.classList.remove('pulse'), 100);
+            
+            updateHUD();
+        }
+
+        function onMiss() {
+            lives--;
+            combo = 1;
+            
+            // Visual feedback
+            document.getElementById('missFlash').classList.add('active');
+            document.getElementById('gameContainer')?.classList.add('shake');
+            setTimeout(() => {
+                document.getElementById('missFlash').classList.remove('active');
+                document.getElementById('gameContainer')?.classList.remove('shake');
+            }, 300);
+            
+            updateHUD();
+            
+            if (lives <= 0) {
+                endGame();
+            }
+        }
+
+        function triggerLevelUp() {
+            const flash = document.getElementById('levelUpFlash');
+            flash.classList.add('active');
+            setTimeout(() => flash.classList.remove('active'), 800);
+        }
+
+        function startGame() {
+            gameState = GameState.PLAYING;
+            score = 0;
+            combo = 1;
+            maxCombo = 1;
+            lives = CONFIG.INITIAL_LIVES;
+            level = 1;
+            orbsCaught = 0;
+            lastSpawnTime = performance.now(); // Use performance.now() to match game loop
+            
+            // Clear existing orbs
+            orbs.forEach(orb => orb.destroy());
+            orbs.length = 0;
+            
+            document.getElementById('menuScreen').classList.add('hidden');
+            document.getElementById('gameOverScreen').classList.add('hidden');
+            
+            // Flash effect to indicate game start
+            triggerLevelUp();
+            
+            // Spawn first orb immediately
+            spawnOrb();
+            
+            console.log('Game Started! State:', gameState);
+            updateHUD();
+        }
+
+        function endGame() {
+            gameState = GameState.GAME_OVER;
+            
+            // Check high score
+            const isNewHigh = score > highScore;
+            if (isNewHigh) {
+                highScore = score;
+                localStorage.setItem('cyberCatchHighScore', highScore);
+            }
+            
+            // Update game over screen
+            document.getElementById('finalScore').textContent = score.toLocaleString();
+            document.getElementById('maxCombo').textContent = `x${maxCombo}`;
+            document.getElementById('orbsCaught').textContent = orbsCaught.toLocaleString();
+            document.getElementById('newHighScore').classList.toggle('hidden', !isNewHigh);
+            
+            document.getElementById('gameOverScreen').classList.remove('hidden');
+            handOpenTimer = 0;
+        }
+
+        // ============================================
+        // MEDIAPIPE HANDS SETUP
+        // ============================================
+        const videoElement = document.getElementById('webcam');
+
+        function countExtendedFingers(landmarks) {
+            // Finger tip and pip landmarks
+            const fingerTips = [8, 12, 16, 20]; // Index, middle, ring, pinky
+            const fingerPips = [6, 10, 14, 18];
+            
+            let count = 0;
+            
+            // Check thumb (different logic - compare x positions)
+            const thumbTip = landmarks[4];
+            const thumbIP = landmarks[3];
+            const thumbMCP = landmarks[2];
+            
+            // Thumb is extended if tip is further from palm center than IP
+            const palmCenter = landmarks[0];
+            const thumbTipDist = Math.abs(thumbTip.x - palmCenter.x);
+            const thumbIPDist = Math.abs(thumbIP.x - palmCenter.x);
+            if (thumbTipDist > thumbIPDist) count++;
+            
+            // Check other fingers (tip should be above pip in y)
+            for (let i = 0; i < 4; i++) {
+                if (landmarks[fingerTips[i]].y < landmarks[fingerPips[i]].y) {
+                    count++;
+                }
+            }
+            
+            return count;
+        }
+
+        function getPalmCenter(landmarks) {
+            // Use wrist (0) and middle finger MCP (9) to find palm center
+            const wrist = landmarks[0];
+            const middleMCP = landmarks[9];
+            return {
+                x: (wrist.x + middleMCP.x) / 2 * window.innerWidth,
+                y: (wrist.y + middleMCP.y) / 2 * window.innerHeight
+            };
+        }
+
+        function onHandResults(results) {
+            handData = { left: null, right: null };
+            
+            const handCount = results.multiHandLandmarks?.length || 0;
+            
+            // Update status panel
+            const handStatus = document.getElementById('handStatus');
+            const leftStatus = document.getElementById('leftHandStatus');
+            const rightStatus = document.getElementById('rightHandStatus');
+            const leftMarker = document.getElementById('leftHandMarker');
+            const rightMarker = document.getElementById('rightHandMarker');
+            
+            // Reset markers
+            leftMarker.classList.remove('active', 'open');
+            rightMarker.classList.remove('active', 'open');
+            
+            if (results.multiHandLandmarks && results.multiHandedness) {
+                handStatus.textContent = handCount;
+                handStatus.className = 'detecting';
+                
+                for (let i = 0; i < results.multiHandLandmarks.length; i++) {
+                    const landmarks = results.multiHandLandmarks[i];
+                    const handedness = results.multiHandedness[i].label;
+                    const fingerCount = countExtendedFingers(landmarks);
+                    const palmCenter = getPalmCenter(landmarks);
+                    const isOpen = fingerCount >= 4; // 4-5 fingers = open palm
+                    
+                    // Note: MediaPipe returns mirrored labels, so we flip them
+                    const actualHand = handedness === 'Left' ? 'right' : 'left';
+                    
+                    handData[actualHand] = {
+                        landmarks,
+                        fingerCount,
+                        palmCenter,
+                        isOpen
+                    };
+                    
+                    // Update hand status display
+                    const statusText = `${fingerCount} fingers ${isOpen ? '(OPEN)' : '(CLOSED)'}`;
+                    if (actualHand === 'left') {
+                        leftStatus.textContent = statusText;
+                        leftStatus.className = isOpen ? 'detecting' : '';
+                        leftMarker.classList.add('active');
+                        if (isOpen) leftMarker.classList.add('open');
+                        leftMarker.style.left = palmCenter.x + 'px';
+                        leftMarker.style.top = palmCenter.y + 'px';
+                    } else {
+                        rightStatus.textContent = statusText;
+                        rightStatus.className = isOpen ? 'detecting' : '';
+                        rightMarker.classList.add('active');
+                        if (isOpen) rightMarker.classList.add('open');
+                        rightMarker.style.left = palmCenter.x + 'px';
+                        rightMarker.style.top = palmCenter.y + 'px';
+                    }
+                }
+            } else {
+                handStatus.textContent = 'NONE';
+                handStatus.className = 'not-detecting';
+                leftStatus.textContent = '-';
+                leftStatus.className = '';
+                rightStatus.textContent = '-';
+                rightStatus.className = '';
+            }
+            
+            // Update catch indicator
+            const hasOpenHand = handData.left?.isOpen || handData.right?.isOpen;
+            const indicator = document.getElementById('catchIndicator');
+            indicator.classList.toggle('active', hasOpenHand);
+            indicator.textContent = hasOpenHand ? '✋ CATCH ZONE ACTIVE' : '✋ OPEN PALM TO CATCH';
+            
+            // Handle game state transitions
+            if (gameState === GameState.MENU || gameState === GameState.GAME_OVER) {
+                const progressBar = gameState === GameState.MENU 
+                    ? document.getElementById('startProgressBar')
+                    : document.getElementById('restartProgressBar');
+                
+                if (hasOpenHand) {
+                    handOpenTimer += 16; // Approximate frame time
+                    const progress = Math.min(100, (handOpenTimer / HAND_OPEN_DELAY) * 100);
+                    if (progressBar) progressBar.style.width = progress + '%';
+                    
+                    if (handOpenTimer >= HAND_OPEN_DELAY) {
+                        startGame();
+                        handOpenTimer = 0;
+                        if (progressBar) progressBar.style.width = '0%';
+                    }
+                } else {
+                    handOpenTimer = 0;
+                    if (progressBar) progressBar.style.width = '0%';
+                }
+            }
+        }
+
+        const hands = new Hands({
+            locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`
+        });
+
+        hands.setOptions({
+            maxNumHands: 2,
+            modelComplexity: 1,
+            minDetectionConfidence: 0.7,
+            minTrackingConfidence: 0.5
+        });
+
+        hands.onResults(onHandResults);
+
+        // Setup camera
+        async function setupCamera() {
+            const cameraStatus = document.getElementById('cameraStatus');
+            
+            try {
+                cameraStatus.textContent = 'REQUESTING...';
+                
+                const stream = await navigator.mediaDevices.getUserMedia({
+                    video: { width: 1280, height: 720 }
+                });
+                videoElement.srcObject = stream;
+                
+                await new Promise(resolve => {
+                    videoElement.onloadedmetadata = resolve;
+                });
+                
+                cameraStatus.textContent = 'ACTIVE';
+                cameraStatus.className = 'detecting';
+                
+                // Start processing frames
+                async function processFrame() {
+                    await hands.send({ image: videoElement });
+                    requestAnimationFrame(processFrame);
+                }
+                processFrame();
+            } catch (err) {
+                cameraStatus.textContent = 'ERROR';
+                cameraStatus.className = 'not-detecting';
+                throw err;
+            }
+        }
+
+        // ============================================
+        // MAIN GAME LOOP
+        // ============================================
+        let lastTime = performance.now();
+        let frameCount = 0;
+        let fpsTime = 0;
+
+        function gameLoop() {
+            requestAnimationFrame(gameLoop);
+            
+            const now = performance.now();
+            const deltaTime = (now - lastTime) / 1000;
+            lastTime = now;
+            
+            // FPS counter and debug info
+            frameCount++;
+            fpsTime += deltaTime;
+            if (fpsTime >= 1) {
+                document.getElementById('fps').textContent = `FPS: ${frameCount}`;
+                document.getElementById('gameStateDisplay').textContent = `STATE: ${gameState.toUpperCase()}`;
+                document.getElementById('orbCount').textContent = `ORBS: ${orbs.length}`;
+                frameCount = 0;
+                fpsTime = 0;
+            }
+            
+            // Update catch zones based on hand positions
+            let zoneIndex = 0;
+            for (const hand of ['left', 'right']) {
+                if (handData[hand] && zoneIndex < catchZones.length) {
+                    catchZones[zoneIndex].update(
+                        handData[hand].palmCenter.x,
+                        handData[hand].palmCenter.y,
+                        handData[hand].isOpen && gameState === GameState.PLAYING
+                    );
+                    zoneIndex++;
+                }
+            }
+            // Hide unused catch zones
+            for (let i = zoneIndex; i < catchZones.length; i++) {
+                catchZones[i].update(null, null, false);
+            }
+            
+            if (gameState === GameState.PLAYING) {
+                // Spawn new orbs
+                if (now - lastSpawnTime > getSpawnInterval()) {
+                    spawnOrb();
+                    lastSpawnTime = now;
+                }
+                
+                // Update orbs
+                const fallSpeed = getFallSpeed();
+                for (let i = orbs.length - 1; i >= 0; i--) {
+                    const orb = orbs[i];
+                    orb.update(deltaTime, fallSpeed);
+                    
+                    // Check for catch with any open hand
+                    for (const hand of ['left', 'right']) {
+                        if (handData[hand]?.isOpen) {
+                            if (orb.checkCatch(handData[hand].palmCenter.x, handData[hand].palmCenter.y, true)) {
+                                onCatch(orb);
+                                break;
+                            }
+                        }
+                    }
+                    
+                    // Remove missed orbs
+                    if (orb.missed) {
+                        onMiss();
+                        orb.destroy();
+                        orbs.splice(i, 1);
+                    }
+                    
+                    // Remove caught orbs after explosion
+                    if (orb.caught && orb.material.opacity <= 0) {
+                        orbs.splice(i, 1);
+                    }
+                }
+            }
+            
+            renderer.render(scene, camera);
+        }
+
+        // ============================================
+        // INITIALIZATION
+        // ============================================
+        function init() {
+            updateHUD();
+            setupCamera().catch(err => {
+                console.error('Camera setup failed:', err);
+                alert('Could not access webcam. Please ensure camera permissions are granted.');
+            });
+            gameLoop();
+        }
+
+        // Handle window resize
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+
+        // Start the game
+        init();
+    </script>
+</body>
+</html>
